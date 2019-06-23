@@ -1,0 +1,602 @@
+Trips and Users:
+
+select request_at, ROUND(SUM(CASE WHEN status != 'completed' THEN 1.000 ELSE 0 END)/ COUNT(id),2) cancellation_rate 
+from trips 
+inner join users on (client_id = user_id)  
+where banned = 'No' 
+and request_at between DATE '2013-10-01' and DATE '2013-10-03' 
+group by request_at 
+order by request_at 
+
+Department top 3 salaries
+
+without subquery:
+
+select dname, e1.ename, e1.sal
+from dept d, emp e1, emp e2
+where d.deptno = e1.deptno and e1.deptno = e2.deptno
+and e1.sal <= e2.sal
+group by dname, e1.ename, e1.sal
+having count(distinct e2.sal) <=3
+order by dname, e1.sal desc ;
+
+select dname, ename, sal
+from(
+select dname, ename, sal, DENSE_RANK() over(partition by e.deptno order by sal desc) as rnk
+from emp e
+inner join dept d on (e.deptno = d.deptno)
+) wrk 
+where wrk.rnk <=3;
+
+Cumulative Salary:
+
+select e1.id, e1.month, e1.sal, sum(e1.sal) over (PARTITION BY e1.id ORDER BY e1.month) cum_sal
+from emp e1,
+(select id, max(month) month from emp  group by id) e2
+where e1.id = e2.id
+and e1.month < e2.month
+
+
+Human traffic of stadium :
+
+select dept_avg.dept_id, dept_avg.pay_month,
+case when dept_avg.salary > company_avg.salary then 'higher'
+     when dept_avg.salary < company_avg.salary then 'lower'
+     else 'same' end as comparison
+from 
+(
+  select avg(amount) as salary, date_format(pay_date, '%Y-%m') as pay_month
+from salary
+group by date_format(pay_date, '%Y-%m')
+) as company_avg
+inner join 
+(
+  select avg(amount) as salary,dept_id, date_format(pay_date, '%Y-%m') as pay_month
+from salary
+inner join employee on (salary.employee_id = employee.emp_id)
+group by dept_id,date_format(pay_date, '%Y-%m')
+) as dept_avg
+on (company_avg.pay_month = dept_avg.pay_month)
+
+
+Student report by geography
+
+select 
+min(case when continent = 'America' then name end) as America,
+min(case when continent = 'Asia' then name end) as Asia,
+min(case when continent = 'Europe' then name end) as Europe
+from select name, continent, row_number() over(partition by continent order by name as id from names ) as names
+order by America, Asia, Europe;
+
+
+
+SELECT *
+FROM   (select name, continent,row_number() over(partition by continent order by name) as x
+from names)
+PIVOT  (max(name) AS name FOR (continent) IN ('America' AS America, 'Europe' AS Europe, 'Asia' AS Asia));
+
+
+Second degree follower:
+
+Select f1.follower, count(distinct f2.follower) as num
+from follow f1
+inner join follow f2 on f1.follower = f2.followee
+Group by f1.follower
+
+
+
+Nth highest salary from employee table:
+
+select e1.id, e1.name
+from emp e1, emp e2
+where e1.sal <= e2.sal
+group by e1.id, e1.name
+having count(distinct e2.sal) = n
+order by e1.id, e1.name;
+
+
+
+CREATE FUNCTION getNthHighestSalary(N INT) RETURNS INT
+BEGIN
+  RETURN (
+      # Write your MySQL query statement below.
+    
+      SELECT  distinct salary 
+FROM Employee e1
+WHERE N-1 = (SELECT COUNT(DISTINCT salary) FROM Employee e2
+WHERE e2.salary > e1.salary)
+
+  );
+END
+
+
+Department highest salary:
+
+select d.name as Department, e1.name as Employee, salary 
+from employee e1, department d
+where e1.DepartmentId = d.id
+and 0 = (select count(distinct salary) from employee e2 where e1.DepartmentId = e2.DepartmentId and e1.salary < e2.salary)
+
+select wrk.dname as Department, wrk.ename as Employee, wrk.salary as salary 
+from
+(select e.id e , d.name dname, e.name ename, e.salary, 
+dense_rank() over(partition by e.departmentid order by e.salary desc) as rnk
+from employee e inner join department d on (e.departmentid = d.id)
+) wrk
+where wrk.rnk = 1;
+
+
+Consecutive numbers :
+
+
+SELECT T.Num as ConsecutiveNums
+FROM
+(SELECT DISTINCT A.Num FROM
+Logs A
+LEFT JOIN Logs B on A.Id = B.Id-1
+LEFT JOIN Logs C on A.Id = C.Id-2
+WHERE A.Num = B.Num AND A.Num = C.Num) T
+
+Highest answer rate 
+
+SELECT question_id as survey_log
+FROM
+(
+	SELECT question_id, SUM(case when action="show" THEN 1 ELSE 0 END) as num_show,    SUM(case when action="answer" THEN 1 ELSE 0 END) as num_answer
+	FROM survey_log
+	GROUP BY question_id
+) as tbl
+ORDER BY (num_answer / num_show) DESC LIMIT 1
+
+
+Winning  Candidate:
+
+SELECT C.Name FROM Candidate C
+WHERE id = (SELECT CandidateId FROM Vote GROUP BY CandidateId ORDER BY COUNT(id) DESC LIMIT 1);
+
+
+Rank scores:
+
+select score, (select count(distinct score) from scores s2 where s1. score <= s2.score) as rank
+from scores s1
+order by score
+
+
+
+select score, (select count(distinct score) from scores s2 where s1. score <= s2.score) as rank
+from scores s1
+order by score desc
+
+Game play analysis IV
+
+select round(
+    sum(case when c.event_date is not null then 1 else 0 end)
+    /count(*)
+    ,2) fraction
+from
+(select a.player_id , min(a.event_date) mindate
+from Activity a
+group by a.player_id) b 
+left join Activity c
+on b.player_id = c.player_id
+and c.event_date - b.mindate = 1
+
+
+Product Sales Analysis III:
+
+select product_id, year as first_year, quantity,price
+from sales 
+where (product_id,year) In 
+(select product_id, min(year) from sales group by product_id) 
+
+Count Student Number in Departments:
+
+select d.dept_name as dept_name, coalesce(count(s.student_id),0) as student_number
+from department d
+left join student s on (d.dept_id = s.dept_id)
+group by d.dept_name
+order by coalesce(count(s.student_id),0)  desc, d.dept_name asc
+
+
+
+
+Most number of friends : 
+
+select id, sum(cnt) num
+from 
+(
+select accepter_id as id, count(accepter_id) as cnt
+from request_accepted
+    group by accepter_id
+union all
+select requester_id as id, count(requester_id) as cnt
+from request_accepted
+    group by requester_id
+    ) a 
+    group by id
+    order by sum(cnt) desc limit 1
+
+Insurance:
+
+select sum(TIV_2016) TIV_2016
+from insurance a
+where 1 = (select count(*) from insurance b where a.LAT=b.LAT and a.LON=b.LON) 
+and 1 < (select count(*) from insurance c where a.TIV_2015=c.TIV_2015)  ;
+
+
+Plane:
+
+select round(sqrt(min(pow(a.x-b.x,2)+pow(a.y-b.y,2))),2) shortest
+from point_2d a, point_2d b
+where (a.x,a.y)!=(b.x,b.y)
+
+
+
+seat exchange:
+
+select
+if(id < (select count(*) from seat), if(id mod 2=0, id-1, id+1), if(id mod 2=0, id-1, id)) as id, student
+from seat
+order by id asc;
+
+
+Tree:
+
+
+select Id,
+case when p_id is null then 'Root' 
+     when id in (select p_id from tree) then 'Inner'
+     else 'Leaf' end as Type
+from tree
+order by id
+
+
+
+Manager with 5 direct reports:
+
+select e2.name
+from employee e1, employee e2
+where e1.managerid = e2.id 
+group by e2.name
+having  count(distinct e1.id) >= 5
+
+select name from employee 
+where id in 
+(select managerId from Employee
+group by managerId
+having count(managerId)>=5) 
+
+
+
+Customers who bought all products:
+
+select customer_id
+from Customer 
+group by customer_id
+having count(distinct(product_key)) = (select count(product_key) from Product)
+
+Game Play Analysis III
+
+select a1.player_id, a1.event_date, sum(a2.games_played) as games_played_so_far
+from activity as a1
+inner join activity as a2
+on a1.event_date >= a2.event_date
+and a1.player_id = a2.player_id
+group by  a1.player_id, a1.event_date
+
+
+Employees with most experience: 
+
+Select a.project_id,a.employee_id
+from
+(
+SELECT p.project_id, e.employee_id,rank() over (partition by project_id order by e.experience_years desc) rnk
+FROM project p JOIN employee e
+ON p.employee_id =e.employee_id
+) a
+where a.rnk =1
+
+Second highest salary with null:
+
+select salary as secondhighestsalary
+from employee e1
+where 2 = (select count(distinct salary) from employee e2 where e1.salary <= e2.salary)
+union
+select null  as secondhighestsalary from dual
+limit  1
+
+Delete duplicate emails:
+
+delete e1
+from person e1, person e2
+where e1.email = e2.email and e1.id > e2.id;
+
+Highest temperatures:
+
+select w1.id
+from weather w1, weather w2
+where datediff(w1.recorddate,w2.recorddate)= 1
+and w1.temperature > w2.temperature
+group by w1.id
+
+
+Most students:
+
+
+select class
+from courses
+group by class
+having count(distinct student) >= 5
+
+
+
+Max num unique ones:
+
+select num
+from my_numbers
+group by num
+having count( num) = 1
+union
+select null as num
+order by num desc
+limit 1
+
+
+Acceptance rate:
+
+select IFNULL(round (b.acc/a.req,2),0) as accept_rate
+from
+(select count(distinct sender_id, send_to_id) as req
+from friend_request) a,
+(select count(distinct requester_id, accepter_id) as acc
+from request_accepted) b;
+
+
+Customers who never order:
+
+select c.name as customers
+from customers c
+left outer join orders o on (c.id = o.customerid)
+where o.customerid is null
+order by c.name
+
+Employees earing more than their managers:
+
+select e1.name as employee
+from employee e1, employee e2
+where e1.managerid = e2.id 
+and e1.salary > e2.salary
+
+Project with most employees:
+
+select project_id
+from(
+select project_id, rank() over(order by count(  employee_id) desc) rnk
+from project
+group by project_id) a where rnk = 1;
+
+Combine 2 tables:
+
+select firstname, lastname, city, state
+from person p
+left join address a on (p.personid = a.personid);
+
+
+Find duplicate emails:
+
+select p1.email
+from person p1, person p2
+where p1.email = p2.email and p1.id > p2.id
+group by p1.email; 
+
+Sales Person : (Similar question asked in Facebook interview)
+
+select s.name
+from orders o
+inner join company c on (o.com_id = c.com_id and c.name = 'RED')
+right join salesperson s on (s.sales_id = o.sales_id) 
+where o.sales_id is null
+group by s.name
+
+Sales Analysis II (Important)
+
+
+SELECT s.buyer_id
+FROM Sales AS s INNER JOIN Product AS p
+ON s.product_id = p.product_id
+GROUP BY s.buyer_id
+HAVING SUM(CASE WHEN p.product_name = 'S8' THEN 1 ELSE 0 END) > 0
+AND SUM(CASE WHEN p.product_name = 'iPhone' THEN 1 ELSE 0 END) = 0;
+
+Get all S8 buyers
+where buyer id not in (Get at iPhone buyers)
+
+Consecutive seats: 
+
+select c1.seat_id
+from cinema c1, cinema c2
+where abs(c1.seat_id - c2.seat_id) = 1 and c1.free = 1 and c1.free = c2.free
+group by c1.seat_id
+order by c1.seat_id;
+
+
+
+SELECT product_id, product_name
+FROM product
+JOIN SALES
+USING(product_id)
+GROUP BY product_id
+HAVING sum(CASE WHEN sale_date between '2019-01-01' and '2019-03-31' THEN 1 ELSE 0 end) > 0
+AND sum(CASE WHEN sale_date between '2019-01-01' and '2019-03-31' THEN 0 else 1 end) = 0
+
+Sales Analysis III (Important)
+
+select p.product_id,p.product_name
+from product p
+where p.product_id not in 
+(
+select p.product_id
+from product p , sales s
+where p.product_id = s.product_id 
+and sale_date not between '2019-01-01' and '2019-03-31'
+)
+;
+
+Game Play Analysis II
+
+select player_id, device_id
+from activity 
+where (player_id, event_date) IN (
+select player_id, min(event_date) min_date
+from activity 
+group by player_id )
+
+
+Employee Bonus (Usage of or in filter)
+
+select e.name , b.bonus
+from employee e 
+left join bonus b on (e.empid = b.empid )
+where b.bonus < 1000 or b.bonus is null;
+
+Project Employees I
+
+
+select p.project_id, ROUND(avg(e.experience_years),2) as average_years
+from project p , employee e
+where p.employee_id = e.employee_id
+group by p.project_id;
+
+
+Triangle Judgement:
+
+select
+x,
+y,
+z,
+case when x+y>z and x+z>y and z+y>x then 'Yes'
+else 'No'
+end as triangle
+from triangle
+
+
+Movie rating:
+
+select id, movie, description, rating
+from cinema
+where id mod 2 > 0 and description <> 'boring'
+order by rating  desc
+
+
+Customers with highest number of orders:
+
+select customer_number from 
+(
+select customer_number, DENSE_RANK() OVER ( ORDER BY COUNT(order_number) desc) as rnk
+from orders
+    group by customer_number
+    ) temp where temp.rnk = 1;
+    
+
+
+SELECT customer_number FROM orders
+GROUP BY customer_number
+having count(distinct order_number) IN
+(SELECT MAX(countn) FROM (select count(distinct order_number) as countn FROM orders GROUP BY customer_number) sub)
+
+select name
+from customer c1, customer c2
+where c1.referee_id = c2.id 
+and c2.id != 2 or c1.referee_id is null;
+
+SELECT name FROM customer WHERE IFNULL(referee_id,0) <> 2;
+
+Swap salary:
+
+update 
+salary 
+set sex = case when sex = 'm' then 'f' else 'm' end 
+
+Shortest distance:
+
+SELECT MIN(a.x - b.x) AS shortest
+FROM point a, point b
+WHERE a.x > b.x;
+
+Big Countries:
+
+select name, population, area
+from world
+where area > 3000000 or population > 25000000
+
+
+Actors and Directors Who Cooperated At Least Three Times:
+
+select actor_id, director_id
+from actordirector
+group by actor_id, director_id
+having count(*) >= 3;
+
+Product Sales Analysis I
+
+
+select p.product_name, s.year, s.price
+from sales s, product p 
+where p.product_id = s.product_id
+
+
+Sales Analysis I:
+
+select seller_id
+from (
+select seller_id, DENSE_RANK() OVER (ORDER BY SUM(price) desc) rnk
+from sales
+    group by seller_id
+    ) temp where temp.rnk = 1;
+    
+Product Sales Analysis II
+
+select product_id, sum(quantity) total_quantity
+from sales
+group by product_id
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
